@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>习惯打卡</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+body{background:#f0f4f8;padding:20px;color:#222}
+.container{max-width:520px;margin:0 auto}
+.card{background:#fff;border-radius:18px;padding:24px;box-shadow:0 2px 14px #00000012;margin-bottom:16px}
+.streak-row{display:flex;gap:16px;text-align:center}
+.half{flex:1}
+.big-num{font-size:56px;font-weight:bold;color:#27ae60}
+.xp-num{font-size:56px;font-weight:bold;color:#e67e22}
+.desc{color:#666;margin-bottom:16px}
+.btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:18px;font-weight:bold}
+.btn-active{background:#27ae60;color:#fff}
+.btn-done{background:#bdc3c7;color:#fff}
+.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px}
+.day{aspect-ratio:1/1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.day-done{background:#27ae60;color:#fff}
+.day-empty{background:#ecf0f1}
+.day-today{border:2px solid #f39c12}
+.title{font-size:20px;font-weight:bold;margin-bottom:12px}
+.task-item{padding:8px 0;display:flex;gap:8px;align-items:center}
+.remind-row{margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type="time"]{padding:8px;border-radius:8px;border:1px solid #ccc}
+.badge-wrap{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.badge{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;background:#eee;opacity:0.3}
+.badge.unlock{opacity:1;background:#ffe66d}
+.badge-tip{font-size:11px;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <div class="streak-row">
+            <div class="half">
+                <div class="big-num" id="streak">0</div>
+                <div class="desc">🔥 连续天数</div>
+            </div>
+            <div class="half">
+                <div class="xp-num" id="xp">0</div>
+                <div class="desc">⭐ XP总分</div>
+            </div>
+        </div>
+        <button class="btn btn-active" id="checkBtn">✅ 今日打卡（+10XP）</button>
+    </div>
+    <div class="card">
+        <div class="title">🔔打卡提醒（iPhone锁屏无效，请用系统闹钟）</div>
+        <div class="remind-row">
+            <span>每日提醒时间：</span>
+            <input type="time" id="remindTime">
+            <button id="setRemindBtn">开启提醒</button>
+        </div>
+        <div style="margin-top:10px;color:#666;font-size:14px" id="remindStatus">未开启提醒</div>
+    </div>
+    <div class="card">
+        <div class="title">🏅 成就徽章</div>
+        <div class="badge-wrap" id="badgeBox">
+            <div class="badge" data-val="3">🥉<div class="badge-tip">3天</div></div>
+            <div class="badge" data-val="7">🥈<div class="badge-tip">7天</div></div>
+            <div class="badge" data-val="14">🥉<div class="badge-tip">14天</div></div>
+            <div class="badge" data-val="30">🥇<div class="badge-tip">30天</div></div>
+            <div class="badge" data-val="100">👑<div class="badge-tip">100天</div></div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="title">📅 打卡日历</div>
+        <div class="calendar" id="calendar"></div>
+    </div>
+    <div class="card">
+        <div class="title">📋 今日任务</div>
+        <div id="taskList"></div>
+    </div>
+</div>
+<script>
+const TASKS = ["写日记","练习10句","跟读","复述"];
+const XP_PER_CHECK = 10;
+const DEFAULT_REMIND_TIME = "18:30";
+const STORAGE_KEY = "streak-xp-record";
+const REMIND_KEY = "streak-remind-setting";
+const XP_KEY = "streak-total-xp";
+
+let records = JSON.parse(localStorage.getItem(STORAGE_KEY))||{};
+let remindConfig = JSON.parse(localStorage.getItem(REMIND_KEY))||{enable:false,time:DEFAULT_REMIND_TIME};
+let totalXp = Number(localStorage.getItem(XP_KEY))||0;
+
+const checkBtn = document.getElementById("checkBtn");
+const streakEl = document.getElementById("streak");
+const xpEl = document.getElementById("xp");
+const calendarEl = document.getElementById("calendar");
+const taskEl = document.getElementById("taskList");
+const remindTimeInput = document.getElementById("remindTime");
+const setRemindBtn = document.getElementById("setRemindBtn");
+const remindStatusEl = document.getElementById("remindStatus");
+const badgeBox = document.getElementById("badgeBox");
+remindTimeInput.value = remindConfig.time;
+
+function getDateStr(d=new Date()){
+    const y=d.getFullYear();
+    const m=String(d.getMonth()+1).padStart(2,"0");
+    const day=String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+}
+const today=getDateStr();
+
+function renderTask(){
+    taskEl.innerHTML="";
+    TASKS.forEach(t=>{
+        const div=document.createElement("div");
+        div.className="task-item";
+        div.innerHTML=`<input type="checkbox"><label>${t}</label>`;
+        taskEl.appendChild(div);
+    })
+}
+
+function calcStreak(){
+    let s=0;
+    let now=new Date();
+    while(true){
+        const dStr=getDateStr(now);
+        if(records[dStr]){s++;now.setDate(now.getDate()-1);}else break;
+    }
+    return s;
+}
+
+function renderBadge(streak){
+    const badges=badgeBox.querySelectorAll(".badge");
+    badges.forEach(b=>{
+        const target=Number(b.dataset.val);
+        if(streak>=target) b.classList.add("unlock");
+        else b.classList.remove("unlock");
+    })
+}
+
+function renderCalendar(){
+    calendarEl.innerHTML="";
+    const d=new Date();
+    d.setDate(d.getDate()-41);
+    for(let i=0;i<42;i++){
+        const ds=getDateStr(d);
+        const div=document.createElement("div");
+        div.className="day";
+        if(records[ds]) div.classList.add("day-done");
+        else div.classList.add("day-empty");
+        if(ds===today) div.classList.add("day-today");
+        div.innerText=d.getDate();
+        calendarEl.appendChild(div);
+        d.setDate(d.getDate()+1);
+    }
+}
+
+function refresh(){
+    const streak=calcStreak();
+    streakEl.innerText=streak;
+    xpEl.innerText=totalXp;
+    renderBadge(streak);
+    if(records[today]){
+        checkBtn.innerText="✅ 今天已经打卡完成";
+        checkBtn.className="btn btn-done";
+        checkBtn.disabled=true;
+    }else{
+        checkBtn.innerText="✅ 今日打卡（+10XP）";
+        checkBtn.className="btn btn-active";
+        checkBtn.disabled=false;
+    }
+    renderCalendar();
+    renderRemindStatus();
+}
+
+checkBtn.onclick=()=>{
+    records[today]=true;
+    totalXp+=XP_PER_CHECK;
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(records));
+    localStorage.setItem(XP_KEY,totalXp);
+    refresh();
+}
+
+async function requestNotify(){
+    if(!("Notification" in window)) return false;
+    if(Notification.permission==="granted") return true;
+    const res=await Notification.requestPermission();
+    return res==="granted";
+}
+
+function renderRemindStatus(){
+    if(remindConfig.enable){
+        remindStatusEl.textContent="✅ 已开启，每天 "+remindConfig.time+"（锁屏不会提醒）";
+    }else{
+        remindStatusEl.textContent="未开启提醒";
+    }
+}
+
+let remindTimer;
+function startRemindCheck(){
+    clearInterval(remindTimer);
+    remindTimer=setInterval(()=>{
+        if(!remindConfig.enable) return;
+        const now=new Date();
+        const hh=String(now.getHours()).padStart(2,"0");
+        const mm=String(now.getMinutes()).padStart(2,"0");
+        const currentTime=`${hh}:${mm}`;
+        if(currentTime===remindConfig.time&&!records[today]){
+            new Notification("🔥打卡提醒",{body:"快去打卡，保住你的连续记录！"});
+        }
+    },30000);
+}
+
+setRemindBtn.onclick=async ()=>{
+    const ok=await requestNotify();
+    if(!ok){
+        alert("iPhone锁屏网页提醒无效，建议设置系统闹钟18:30");
+        return;
+    }
+    remindConfig.time=remindTimeInput.value;
+    remindConfig.enable=true;
+    localStorage.setItem(REMIND_KEY,JSON.stringify(remindConfig));
+    startRemindCheck();
+    refresh();
+    alert("提醒设置："+remindConfig.time+"，仅前台打开页面才生效");
+}
+
+renderTask();
+refresh();
+startRemindCheck();
+</script>
+</body>
+</html>
